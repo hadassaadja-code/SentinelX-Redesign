@@ -1,0 +1,49 @@
+{
+  "name": "sentinelx-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "worker": "cross-env PROCESS_ROLE=worker tsx src/index.ts",
+    "db": "prisma db push",
+    "db:generate": "prisma generate",
+    "schema:postgres": "node scripts/make-postgres-schema.mjs",
+    "db:postgres": "node scripts/make-postgres-schema.mjs && prisma db push --schema prisma/schema.postgresql.prisma",
+    "generate:postgres": "node scripts/make-postgres-schema.mjs && prisma generate --schema prisma/schema.postgresql.prisma",
+    "reset": "tsx scripts/reset.ts",
+    "superadmin": "tsx scripts/superadmin.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "browsers": "playwright install chromium"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.0",
+    "@fastify/static": "^8.0.0",
+    "@node-rs/argon2": "^2.0.0",
+    "@prisma/client": "^6.0.0",
+    "axe-core": "^4.14.1",
+    "bullmq": "^6.7.8",
+    "fastify": "^5.0.0",
+    "jsonwebtoken": "^9.0.0",
+    "nodemailer": "^10.6.0",
+    "pdfkit": "^0.15.0",
+    "pixelmatch": "^7.1.0",
+    "playwright": "^1.65.1",
+    "pngjs": "^7.0.0",
+    "stripe": "^23.2.0",
+    "undici": "^7.0.0",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
+    "@types/pixelmatch": "^5.2.6",
+    "@types/pngjs": "^6.0.5",
+    "cross-env": "^7.0.3",
+    "prisma": "^6.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.4"
+  }
+}

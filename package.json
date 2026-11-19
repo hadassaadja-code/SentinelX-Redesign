@@ -1,0 +1,15 @@
+{
+  "name": "sentinelx",
+  "private": true,
+  "scripts": {
+    "setup": "npm --prefix server install && npm --prefix server run db && npm --prefix server run browsers && npm --prefix web install",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix web run build && npm --prefix server start",
+    "dev": "npm --prefix server run dev",
+    "worker": "npm --prefix server run worker",
+    "test": "npm --prefix server test",
+    "typecheck": "npm --prefix server run typecheck && npx --prefix web tsc --noEmit -p web/tsconfig.json",
+    "reset": "npm --prefix server run reset",
+    "superadmin": "npm --prefix server run superadmin --"
+  }
+}

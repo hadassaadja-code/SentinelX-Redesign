@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/*.db
+**/*.db-journal
+server/data
+server/.jwt-secret
+server/.encryption-key
+.env
+.git
+*.pdf

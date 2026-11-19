@@ -1,0 +1,394 @@
+// SentinelX - schéma de données
+// Développement : SQLite (fichier local). Production : PostgreSQL.
+// Le fichier schema.postgresql.prisma est généré par `npm run schema:postgres`
+// (même modèle, seul le bloc datasource change). Ne pas utiliser de type Json pour rester compatible avec les deux.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ======================= COMPTES =======================
+model User {
+  id              String               @id @default(cuid())
+  email           String               @unique
+  name            String
+  passwordHash    String
+  emailVerifiedAt DateTime?
+  isSuperAdmin    Boolean              @default(false)
+  // Authentification à deux facteurs (TOTP)
+  totpSecret      String?              // chiffré (AES-256-GCM)
+  totpEnabled     Boolean              @default(false)
+  recoveryCodes   String               @default("[]") // hachés (SHA-256), JSON
+  // Protection contre la force brute, persistée (survit au redémarrage)
+  failedLogins    Int                  @default(0)
+  lockedUntil     DateTime?
+  lastLoginAt     DateTime?
+  // Préférences de notification
+  notifyEmail     Boolean              @default(true)
+  notifyDigest    Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  memberships     OrganizationMember[]
+  sessions        Session[]
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orgId       String?   // organisation active (un utilisateur peut appartenir à plusieurs organisations)
+  userAgent   String    @default("")
+  ip          String    @default("")
+  revoked     Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  expiresAt   DateTime
+
+  @@index([userId])
+}
+
+// Jetons à usage unique : vérification d'e-mail, réinitialisation, invitation, étape 2FA, partage de rapport
+model Token {
+  id        String    @id @default(cuid())
+  kind      String    // VERIFY_EMAIL | RESET_PASSWORD | INVITE | MFA_LOGIN | API_KEY
+  tokenHash String    @unique // SHA-256 du jeton : le jeton en clair n'est jamais stocké
+  userId    String?
+  orgId     String?
+  email     String?
+  data      String    @default("{}") // JSON : rôle d'invitation, inviteur, etc.
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([kind, email])
+}
+
+// ======================= ORGANISATIONS =======================
+model Organization {
+  id                   String               @id @default(cuid())
+  name                 String
+  plan                 String               @default("STARTER") // STARTER | PROFESSIONAL | BUSINESS
+  status               String               @default("ACTIVE") // ACTIVE | SUSPENDED
+  planOverrides        String               @default("{}") // quotas personnalisés par le Super Administrateur (JSON)
+  require2fa           Boolean              @default(false)
+  // Canaux d'alerte
+  alertEmails          String               @default("") // adresses supplémentaires, séparées par des virgules
+  webhookUrl           String?              // alertes sortantes (format JSON générique, compatible Slack/Discord)
+  // Abonnement (fournisseur de paiement)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  subscriptionStatus   String               @default("DEMO") // DEMO | ACTIVE | PAST_DUE | CANCELED | TRIALING
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime             @default(now())
+  members              OrganizationMember[]
+  projects             Project[]
+  payments             Payment[]
+}
+
+model OrganizationMember {
+  id        String       @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String // ADMIN | TECH_LEAD | ANALYST | READER
+  createdAt DateTime     @default(now())
+
+  @@unique([orgId, userId])
+}
+
+// ======================= PÉRIMÈTRE =======================
+model Project {
+  id           String        @id @default(cuid())
+  orgId        String
+  org          Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name         String
+  description  String        @default("")
+  techLeadId   String?       // responsable technique du projet
+  archived     Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  applications Application[]
+
+  @@index([orgId])
+}
+
+model Application {
+  id                   String         @id @default(cuid())
+  orgId                String
+  projectId            String
+  project              Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name                 String
+  description          String         @default("")
+  url                  String
+  type                 String         @default("WEB") // WEB | API
+  environment          String         @default("PRODUCTION") // DEVELOPMENT | STAGING | PRODUCTION
+  technologies         String         @default("")
+  ownerId              String?        // propriétaire technique
+  openapiUrl           String?        // spécification OpenAPI (module API)
+  // Autorisation d'audit (section 14.4)
+  authorized           Boolean        @default(false)
+  authorizedAt         DateTime?
+  authorizedBy         String?
+  authorizedScopes     String         @default("PASSIVE") // PASSIVE,ACTIVE,LOAD (validation spécifique pour l'actif et la charge)
+  authorizationExpires DateTime?
+  verificationToken    String?        // preuve de propriété : enregistrement DNS TXT ou fichier .well-known
+  verifiedAt           DateTime?
+  verificationMethod   String?        // DNS | HTTP | META
+  allowedPaths         String         @default("") // préfixes autorisés (un par ligne) ; vide = tout le site
+  excludedPaths        String         @default("") // préfixes exclus
+  maxRequestsPerScan   Int            @default(300)
+  scanHeaders          String         @default("") // en-têtes supplémentaires pour les audits (JSON chiffré)
+  browsers             String         @default("chromium") // chromium,firefox,webkit
+  // Planification des audits
+  scheduleHours        Int            @default(0) // 0 = aucune, 24 = quotidien, 168 = hebdomadaire
+  scheduleModules      String         @default("QA,SECURITY,PERFORMANCE")
+  nextScanAt           DateTime?
+  perfBudgetMs         Int            @default(0) // seuil de performance (temps moyen) ; 0 = aucun
+  // Monitoring (section 9)
+  monitoring           Boolean        @default(false)
+  monitorInterval      Int            @default(60) // minutes
+  monitorExpectStatus  Int            @default(0) // 0 = tout code < 500
+  monitorKeyword       String         @default("") // texte attendu dans la réponse
+  monitorMaxMs         Int            @default(0) // temps de réponse maximal ; 0 = aucun
+  monitorFailThreshold Int            @default(2) // échecs consécutifs avant incident (anti-faux positifs)
+  consecutiveFails     Int            @default(0)
+  maintenanceUntil     DateTime?      // fenêtre de maintenance : pas d'alerte
+  sslDaysWarn          Int            @default(30)
+  lastStatus           String         @default("UNKNOWN") // UP | DOWN | UNKNOWN
+  lastHttpCode         Int?
+  lastResponseMs       Int?
+  lastCheckedAt        DateTime?
+  sslExpiresAt         DateTime?
+  createdAt            DateTime       @default(now())
+  scans                Scan[]
+  incidents            Incident[]
+  checks               MonitorCheck[]
+
+  @@index([orgId])
+  @@index([projectId])
+}
+
+// ======================= CAMPAGNES =======================
+model Scan {
+  id              String              @id @default(cuid())
+  orgId           String
+  applicationId   String
+  application     Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  modules         String // ex: "QA,SECURITY,API,PERFORMANCE"
+  profile         String              @default("STANDARD") // STANDARD | DEEP | LOAD
+  config          String              @default("{}") // paramètres (test de charge : vus, durée, seuils)
+  status          String              @default("QUEUED") // QUEUED | RUNNING | DONE | FAILED | CANCELED
+  stage           String              @default("")
+  progress        Int                 @default(0)
+  cancelRequested Boolean             @default(false)
+  triggeredBy     String              @default("MANUAL") // MANUAL | SCHEDULE
+  requestsMade    Int                 @default(0)
+  error           String?
+  score           Int?
+  summary         String              @default("{}")
+  createdById     String
+  createdAt       DateTime            @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  findings        Finding[]
+  testResults     TestResult[]
+  metrics         PerformanceMetric[]
+  reports         Report[]
+
+  @@index([orgId])
+  @@index([applicationId, createdAt])
+}
+
+model Finding {
+  id             String           @id @default(cuid())
+  orgId          String
+  scanId         String
+  scan           Scan             @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  applicationId  String
+  module         String // SECURITY | API | QA | PERFORMANCE
+  category       String           @default("") // famille : TRANSPORT, HEADERS, COOKIES, INJECTION, ...
+  title          String
+  description    String
+  severity       String // INFO | LOW | MEDIUM | HIGH | CRITICAL
+  resource       String
+  evidence       String
+  recommendation String
+  cwe            String           @default("") // ex: CWE-79
+  owasp          String           @default("") // ex: A05:2021 ou API2:2023
+  status         String           @default("DETECTED") // DETECTED | CONFIRMED | ASSIGNED | IN_PROGRESS | FIXED | RETESTED | CLOSED | FALSE_POSITIVE
+  note           String           @default("")
+  assigneeId     String?
+  fingerprint    String
+  firstSeenAt    DateTime         @default(now())
+  occurrences    Int              @default(1)
+  createdAt      DateTime         @default(now())
+  comments       FindingComment[]
+
+  @@index([orgId])
+  @@index([applicationId, fingerprint])
+}
+
+model FindingComment {
+  id        String   @id @default(cuid())
+  orgId     String
+  findingId String
+  finding   Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  userId    String
+  userName  String   @default("")
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([findingId])
+}
+
+model TestResult {
+  id         String @id @default(cuid())
+  orgId      String
+  scanId     String
+  scan       Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  group      String @default("STATIC") // STATIC | BROWSER | ACCESSIBILITY | FORMS | VISUAL | API
+  browser    String @default("")
+  name       String
+  status     String // PASS | FAIL | SKIP
+  detail     String @default("")
+  durationMs Int    @default(0)
+}
+
+model PerformanceMetric {
+  id     String @id @default(cuid())
+  orgId  String
+  scanId String
+  scan   Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  group  String @default("SERVER") // SERVER | VITALS | LOAD | RESOURCES
+  name   String
+  value  Float
+  unit   String
+}
+
+// ======================= MONITORING =======================
+model MonitorCheck {
+  id            String      @id @default(cuid())
+  orgId         String
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  at            DateTime    @default(now())
+  up            Boolean
+  httpCode      Int?
+  responseMs    Int?
+  error         String      @default("")
+
+  @@index([applicationId, at])
+  @@index([orgId])
+}
+
+model Incident {
+  id               String      @id @default(cuid())
+  orgId            String
+  applicationId    String
+  application      Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  kind             String      @default("DOWN") // DOWN | SLOW | KEYWORD | SSL
+  title            String
+  status           String      @default("OPEN") // OPEN | ACKNOWLEDGED | RESOLVED
+  occurrences      Int         @default(1)
+  acknowledgedById String?
+  acknowledgedAt   DateTime?
+  notes            String      @default("")
+  startedAt        DateTime    @default(now())
+  lastSeenAt       DateTime    @default(now())
+  resolvedAt       DateTime?
+
+  @@index([orgId])
+  @@index([applicationId, status])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  orgId     String
+  type      String
+  title     String
+  body      String   @default("")
+  link      String   @default("")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([orgId, read])
+}
+
+// ======================= RAPPORTS ET FACTURATION =======================
+model Report {
+  id             String    @id @default(cuid())
+  orgId          String
+  scanId         String?
+  scan           Scan?     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  kind           String    @default("SCAN") // SCAN | SUMMARY
+  title          String
+  shareToken     String?   @unique // lien de partage (accès sans compte, durée limitée)
+  shareExpiresAt DateTime?
+  createdById    String
+  createdAt      DateTime  @default(now())
+
+  @@index([orgId])
+}
+
+model Payment {
+  id         String       @id @default(cuid())
+  orgId      String
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  provider   String       @default("stripe")
+  externalId String       @unique
+  plan       String
+  amount     Int // en centimes
+  currency   String       @default("eur")
+  status     String // PAID | FAILED | REFUNDED | PENDING
+  invoiceUrl String       @default("")
+  createdAt  DateTime     @default(now())
+
+  @@index([orgId])
+}
+
+model UsageRecord {
+  id        String   @id @default(cuid())
+  orgId     String
+  day       String // AAAA-MM-JJ
+  scans     Int      @default(0)
+  requests  Int      @default(0) // requêtes HTTP émises par les moteurs
+  checks    Int      @default(0) // vérifications de monitoring
+  createdAt DateTime @default(now())
+
+  @@unique([orgId, day])
+}
+
+// ======================= PLATEFORME =======================
+model AuditLog {
+  id        String   @id @default(cuid())
+  orgId     String?
+  userId    String?
+  action    String
+  detail    String   @default("")
+  ip        String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([orgId, createdAt])
+}
+
+model PlatformSetting {
+  key       String   @id
+  value     String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
+// Boîte d'envoi : trace de chaque e-mail (envoyé par SMTP, ou simplement journalisé sans SMTP)
+model EmailOutbox {
+  id        String    @id @default(cuid())
+  to        String
+  subject   String
+  text      String
+  html      String    @default("")
+  status    String    @default("QUEUED") // QUEUED | SENT | FAILED | LOGGED
+  error     String    @default("")
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+}

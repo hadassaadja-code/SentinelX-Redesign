@@ -1,0 +1,35 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_DB: sentinelx, POSTGRES_USER: sentinelx, POSTGRES_PASSWORD: sentinelx }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U sentinelx" --health-interval 10s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: "**/package-lock.json" }
+      - name: Dépendances
+        run: npm --prefix server ci && npm --prefix web ci
+      - name: Vérification des types
+        run: npm --prefix server run typecheck && npx --prefix web tsc --noEmit -p web/tsconfig.json
+      - name: Tests unitaires et d'intégration (SQLite)
+        run: npm --prefix server run db && npm --prefix server test
+      - name: Schéma PostgreSQL
+        run: npm --prefix server run db:postgres
+        env: { DATABASE_URL: postgresql://sentinelx:sentinelx@localhost:5432/sentinelx }
+      - name: Compilation du frontend
+        run: npm --prefix web run build
+      - name: Image Docker
+        run: docker build -t sentinelx:ci .

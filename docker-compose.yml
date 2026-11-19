@@ -1,0 +1,86 @@
+# SentinelX — architecture cible (13.2) : PostgreSQL, Redis, API, workers isolés, reverse proxy Nginx.
+#   docker compose up -d --build
+#   docker compose exec api npx tsx scripts/superadmin.ts admin@exemple.com
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sentinelx
+      POSTGRES_USER: sentinelx
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sentinelx}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinelx -d sentinelx"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      PROCESS_ROLE: api
+      DATABASE_URL: postgresql://sentinelx:${POSTGRES_PASSWORD:-sentinelx}@postgres:5432/sentinelx
+      REDIS_URL: redis://redis:6379
+      TRUST_PROXY: "1"
+    volumes:
+      - appdata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      PROCESS_ROLE: worker
+      DATABASE_URL: postgresql://sentinelx:${POSTGRES_PASSWORD:-sentinelx}@postgres:5432/sentinelx
+      REDIS_URL: redis://redis:6379
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+    command: ["sh", "-c", "sleep 10 && npx tsx src/index.ts"]
+    volumes:
+      - appdata:/data
+    depends_on:
+      - api
+    # Isolation des moteurs (14.2) : ressources limitées, système de fichiers en lecture seule hors /data et /tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  appdata:
