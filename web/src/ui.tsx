@@ -86,9 +86,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
     }
   }, [])
+  const toast = useToast()
+  const toastRef = useRef(toast)
+  toastRef.current = toast
   useEffect(() => {
     reload()
   }, [reload])
+  // Session perdue (expirée, révoquée ou supprimée côté serveur) : on oublie l'utilisateur, la coquille redirige vers la connexion.
+  useEffect(() => {
+    const onLost = () => setMe((cur: any) => {
+      if (cur) toastRef.current.error('Votre session a expiré. Veuillez vous reconnecter.')
+      return null
+    })
+    window.addEventListener('sx:session-lost', onLost)
+    return () => window.removeEventListener('sx:session-lost', onLost)
+  }, [])
   return <AuthCtx.Provider value={{ me, loading, reload }}>{children}</AuthCtx.Provider>
 }
 export const useAuth = () => useContext(AuthCtx)

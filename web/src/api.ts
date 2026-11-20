@@ -11,6 +11,8 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
     const e: any = new Error(data?.error ?? `Erreur ${res.status}`)
     e.status = res.status
     e.code = data?.code
+    // Session invalide ou expirée hors du flux de connexion : l'application se déconnecte et renvoie vers la page de connexion.
+    if (res.status === 401 && !['/auth/login', '/auth/mfa', '/auth/me', '/auth/register', '/auth/logout'].some((p) => path.startsWith(p))) window.dispatchEvent(new CustomEvent('sx:session-lost', { detail: e.message }))
     throw e
   }
   return data as T
