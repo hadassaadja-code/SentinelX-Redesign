@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { api } from './api'
-import { Brand, DevLinks, Err, useAction, useAuth } from './ui'
-import { Footer } from './Footer'
+import { Brand, DevLinks, Err, Icon, THEME_FR, themeIcon, useAction, useAuth, useTheme } from './ui'
+import { CONTACT, Footer } from './Footer'
 
 const ICONS: Record<string, React.ReactNode> = {
   qa: (<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="m9 11 3 3L22 4" /></>),
@@ -27,23 +27,46 @@ const MODULES = [
   { k: 'org', color: '#0ea5b7', title: 'Multi-organisation', text: "Chaque entreprise dispose d'un espace isolé, de rôles et de quotas selon sa formule." },
 ]
 
+const MENU = [
+  { label: 'Modules', href: '#modules' },
+  { label: 'Sécurité', href: '#module-security' },
+  { label: 'Performance', href: '#module-perf' },
+  { label: 'Monitoring', href: '#module-monitor' },
+  { label: 'Rapports', href: '#module-report' },
+  { label: 'Contact', href: '#contact' },
+]
 export function Landing() {
   const { me } = useAuth()
+  const [theme, toggle] = useTheme()
+  const [q, setQ] = useState('')
+  const needle = q.trim().toLowerCase()
+  const modules = needle ? MODULES.filter((m) => (m.title + ' ' + m.text).toLowerCase().includes(needle)) : MODULES
+  const initials = me ? String(me.user.name ?? '?').split(/\s+/).map((s: string) => s[0]).join('').slice(0, 2).toUpperCase() : ''
   return (
-    <div className="pub" id="securite">
-      <nav className="pubnav">
+    <>
+    <div className="pub">
+      <header className="pubhead">
         <Brand />
-        <div className="row">
+        <nav className="pubmenu" aria-label="Menu principal">
+          {MENU.map((m) => <a key={m.href} href={m.href}>{m.label}</a>)}
+        </nav>
+        <form className="pubsearch" role="search" onSubmit={(e) => { e.preventDefault(); document.getElementById('modules')?.scrollIntoView({ behavior: 'smooth' }) }}>
+          <input type="search" placeholder="Rechercher un module…" aria-label="Rechercher un module" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button type="submit" aria-label="Rechercher" onClick={(e) => { const input = e.currentTarget.previousElementSibling as HTMLInputElement | null; if (input && document.activeElement !== input && !q.trim()) { e.preventDefault(); input.focus() } }}><Icon name="search" /></button>
+        </form>
+        <div className="pubhead-right">
+          <a className="chip" href={`mailto:${CONTACT.email}`}>Support en ligne</a>
+          <button type="button" className="iconbtn" onClick={toggle} title={`Thème : ${THEME_FR[theme]} (cliquer pour changer)`} aria-label="Changer de thème"><Icon name={themeIcon(theme)} /></button>
           {me ? (
-            <Link className="btn" to="/app">Ouvrir mon espace</Link>
+            <Link className="pubuser" to="/app" title="Ouvrir mon espace"><span className="name">{me.user.name}</span><span className="avatar">{initials}</span></Link>
           ) : (
             <>
-              <Link className="btn ghost" to="/login">Connexion</Link>
+              <Link className="pubuser" to="/login"><span className="name">Connexion</span></Link>
               <Link className="btn" to="/register">Créer un compte</Link>
             </>
           )}
         </div>
-      </nav>
+      </header>
 
       <section className="hero">
         <div>
@@ -94,9 +117,10 @@ export function Landing() {
       <section id="modules">
         <h2 className="section-title">Tout ce qu'il faut pour suivre vos applications</h2>
         <p className="section-sub">Six modules, un seul tableau de bord, des résultats clairs avec la preuve et la correction à appliquer.</p>
+        {needle && modules.length === 0 && <p className="muted">Aucun module ne correspond à « {q} ».</p>}
         <div className="grid g3">
-          {MODULES.map((m) => (
-            <div className="card modcard" key={m.k}>
+          {modules.map((m) => (
+            <div className="card modcard" key={m.k} id={`module-${m.k}`}>
               <Tile k={m.k} color={m.color} />
               <h2>{m.title}</h2>
               <p className="muted">{m.text}</p>
@@ -104,9 +128,9 @@ export function Landing() {
           ))}
         </div>
       </section>
-
-      <Footer />
     </div>
+    <Footer />
+    </>
   )
 }
 

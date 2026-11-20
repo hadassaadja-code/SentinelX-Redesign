@@ -28,6 +28,7 @@ const PATHS: Record<string, string> = {
   plus: 'M12 5v14M5 12h14',
   play: 'M5 3l14 9-14 9V3z',
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
+  leaf: 'M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10ZM2 21c0-3 1.85-5.36 5.08-6',
   inbox: 'M22 12h-6l-2 3h-4l-2-3H2M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z',
   gauge: 'M12 14l4-4M3.34 19a10 10 0 1 1 17.32 0',
   clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
@@ -149,10 +150,15 @@ export function useAction() {
 }
 
 // ---------- Thème ----------
-export function useTheme(): [string, () => void] {
+/** Thèmes disponibles : clair, sombre et menthe (vert menthe + bleu électrique). */
+export const THEMES = ['light', 'dark', 'mint'] as const
+export const THEME_FR: Record<string, string> = { light: 'Clair', dark: 'Sombre', mint: 'Menthe' }
+export const themeIcon = (t: string) => (t === 'dark' ? 'moon' : t === 'mint' ? 'leaf' : 'sun')
+export function useTheme(): [string, () => void, (t: string) => void] {
   const [theme, setTheme] = useState(() => {
     try {
-      return localStorage.getItem('sx-theme') ?? 'light'
+      const t = localStorage.getItem('sx-theme') ?? 'light'
+      return (THEMES as readonly string[]).includes(t) ? t : 'light'
     } catch {
       return 'light'
     }
@@ -163,7 +169,8 @@ export function useTheme(): [string, () => void] {
       localStorage.setItem('sx-theme', theme)
     } catch {}
   }, [theme])
-  return [theme, () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))]
+  // Le bouton d'en-tête fait défiler les thèmes ; le réglage précis se fait dans Paramètres.
+  return [theme, () => setTheme((t) => THEMES[(THEMES.indexOf(t as any) + 1) % THEMES.length]), (t) => setTheme((THEMES as readonly string[]).includes(t) ? t : 'light')]
 }
 
 // ---------- Petits composants ----------
@@ -279,6 +286,7 @@ export function Shell() {
     nav('/app')
   }
   const initials = String(me.user.name ?? '?').split(/\s+/).map((s: string) => s[0]).join('').slice(0, 2).toUpperCase()
+  const section = NAV.flatMap((g) => g.items as Array<{ to: string; label: string; end?: boolean }>).find((it) => (it.end ? loc.pathname === it.to : loc.pathname.startsWith(it.to)))?.label ?? (loc.pathname.startsWith('/admin') ? 'Super Administration' : 'SentinelX')
   return (
     <div className="shell">
       <div className={'scrim' + (open ? ' open' : '')} onClick={() => setOpen(false)} />
@@ -310,16 +318,25 @@ export function Shell() {
             <div style={{ minWidth: 0 }}><b style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.user.name}</b><div className="muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.org.name} · {ROLE_FR[me.role]}</div></div>
           </div>
           <div className="row" style={{ marginTop: 10 }}>
-            <button className="iconbtn" onClick={toggle} title={theme === 'dark' ? 'Thème clair' : 'Thème sombre'} aria-label="Changer de thème"><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
+            <button className="iconbtn" onClick={toggle} title={`Thème : ${THEME_FR[theme]} (cliquer pour changer)`} aria-label="Changer de thème"><Icon name={themeIcon(theme)} /></button>
             <button className="iconbtn" onClick={logout} title="Déconnexion" aria-label="Déconnexion"><Icon name="logout" /></button>
           </div>
         </div>
       </aside>
       <div style={{ minWidth: 0 }}>
         <header className="topbar">
-          <button className="iconbtn" onClick={() => setOpen(true)} aria-label="Ouvrir le menu"><Icon name="menu" /></button>
+          <button className="iconbtn menu" onClick={() => setOpen(true)} aria-label="Ouvrir le menu"><Icon name="menu" /></button>
           <Brand to="/app" />
-          <Link to="/app/notifications" className="iconbtn right" aria-label="Notifications"><Icon name="bell" />{me.unread > 0 && <span className="pill">{me.unread}</span>}</Link>
+          <div className="topbar-title">{section}<small>{me.org.name}</small></div>
+          <div className="topbar-actions">
+            <button className="iconbtn theme" onClick={toggle} title={`Thème : ${THEME_FR[theme]} (cliquer pour changer)`} aria-label="Changer de thème"><Icon name={themeIcon(theme)} /></button>
+            <Link to="/app/notifications" className="iconbtn" aria-label="Notifications" title="Notifications"><Icon name="bell" />{me.unread > 0 && <span className="pill">{me.unread}</span>}</Link>
+            <Link to="/app/settings" className="userchip" title="Mon compte">
+              <span className="avatar">{initials}</span>
+              <span className="who"><b>{me.user.name}</b><small>{ROLE_FR[me.role]}</small></span>
+            </Link>
+            <button className="iconbtn" onClick={logout} title="Déconnexion" aria-label="Déconnexion"><Icon name="logout" /></button>
+          </div>
         </header>
         <main className="main" ref={mainRef}>
           {!me.user.emailVerified && (

@@ -2,7 +2,7 @@
 import React, { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { api, SCAN_FR, fmt, fmtDate, ago } from './api'
-import { Brand, Empty, Err, Icon, Loading, Modal, Ok, PageHead, Tabs, useAction, useAuth, useLoad, useTheme } from './ui'
+import { Brand, Empty, Err, Icon, Loading, Modal, Ok, PageHead, Tabs, THEME_FR, themeIcon, useAction, useAuth, useLoad, useTheme } from './ui'
 import { BarChart } from './charts'
 import { FooterLight } from './Footer'
 
@@ -26,11 +26,19 @@ export function SuperAdmin() {
         <div className="foot">
           <div><b>{me.user.name}</b></div>
           <div className="muted">Super Administrateur</div>
-          <button className="btn ghost sm" style={{ marginTop: 10 }} onClick={toggle}>{theme === 'dark' ? 'Thème clair' : 'Thème sombre'}</button>
+          <button className="btn ghost sm" style={{ marginTop: 10 }} onClick={toggle}>Thème : {THEME_FR[theme]}</button>
         </div>
       </aside>
       <div style={{ minWidth: 0 }}>
-      <header className="topbar"><button className="iconbtn" onClick={() => setOpen(true)} aria-label="Ouvrir le menu"><Icon name="menu" /></button><Brand to="/admin" /></header>
+      <header className="topbar">
+        <button className="iconbtn menu" onClick={() => setOpen(true)} aria-label="Ouvrir le menu"><Icon name="menu" /></button>
+        <Brand to="/admin" />
+        <div className="topbar-title">{tabs.find((t) => t.id === tab)?.label}<small>Super Administration</small></div>
+        <div className="topbar-actions">
+          <button className="iconbtn theme" onClick={toggle} title={`Thème : ${THEME_FR[theme]} (cliquer pour changer)`} aria-label="Changer de thème"><Icon name={themeIcon(theme)} /></button>
+          <span className="userchip"><span className="avatar">{String(me.user.name ?? '?').slice(0, 2).toUpperCase()}</span><span className="who"><b>{me.user.name}</b><small>Super Administrateur</small></span></span>
+        </div>
+      </header>
       <main className="main">
         <div className="note warn">Tout accès aux données d'une organisation cliente doit être justifié : le motif est enregistré dans le journal avec votre identité.</div>
         {tab === 'overview' && <Overview />}

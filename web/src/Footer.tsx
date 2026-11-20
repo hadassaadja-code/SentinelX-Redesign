@@ -15,7 +15,7 @@ const LINKS = [
   { label: 'À propos de SentinelX', to: '/#modules' },
   { label: 'Modules', to: '/#modules' },
   { label: 'Formules et tarifs', to: '/register' },
-  { label: 'Sécurité de la plateforme', to: '/#securite' },
+  { label: 'Sécurité de la plateforme', to: '/#module-security' },
 ]
 const USEFUL = [
   { label: 'Créer un compte', to: '/register' },
@@ -31,7 +31,7 @@ const USEFUL = [
 /** Pied de page complet, page d'accueil. */
 export function Footer() {
   return (
-    <footer className="footer" role="contentinfo">
+    <footer className="footer" role="contentinfo" id="contact">
       <div className="footer-in">
         <div className="footer-tag"><span>Plateforme SaaS · QA · Cybersécurité · Performance</span></div>
         <div className="footer-cols">

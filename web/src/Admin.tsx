@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { api, ROLE_FR, fmt, fmtDate, ago } from './api'
-import { CopyBtn, DevLinks, Empty, Err, Icon, Loading, Modal, Ok, PageHead, Skeleton, Tabs, useAction, useAuth, useCan, useLoad, useTheme } from './ui'
+import { CopyBtn, DevLinks, Empty, Err, Icon, Loading, Modal, Ok, PageHead, Skeleton, Tabs, useAction, useAuth, useCan, useLoad, THEMES, THEME_FR, useTheme } from './ui'
 
 // ================= NOTIFICATIONS =================
 export function Notifications() {
@@ -233,7 +233,7 @@ export function Settings() {
   const can = useCan()
   const { me, reload: reloadMe } = useAuth()
   const [params] = useSearchParams()
-  const [theme, toggle] = useTheme()
+  const [theme, , setTheme] = useTheme()
   const [tab, setTab] = useState(params.get('mfa') ? 'security' : 'profile')
   const sessions = useLoad<any[]>(() => api('/auth/sessions'))
   const prof = useAction()
@@ -257,7 +257,11 @@ export function Settings() {
               <button className="btn" disabled={prof.busy}>Enregistrer</button>
             </div>
             <p className="muted small" style={{ marginTop: 10 }}>{me.user.email} {me.user.emailVerified ? <span className="badge ok">confirmé</span> : <span className="badge bad">non confirmé</span>}</p>
-            <button type="button" className="btn ghost sm" onClick={toggle}>Passer au thème {theme === 'dark' ? 'clair' : 'sombre'}</button>
+            <label className="f" style={{ maxWidth: 260 }}>Thème de l'interface
+              <select value={theme} onChange={(e) => setTheme(e.target.value)}>
+                {THEMES.map((t) => <option key={t} value={t}>{THEME_FR[t]}</option>)}
+              </select>
+            </label>
           </form>
           <form className="card" onSubmit={async (e) => { e.preventDefault(); setDone(''); if (await pwd.run(() => api('/auth/password', { method: 'POST', body: p }), { success: 'Mot de passe modifié.' })) { setP({ current: '', next: '' }); setDone('Mot de passe modifié. Vos autres sessions ont été fermées.'); sessions.reload() } }}>
             <h2>Mot de passe</h2>
